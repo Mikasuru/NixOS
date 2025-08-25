@@ -1,0 +1,723 @@
+{
+  description = "NixOS configuration for RTX 4070 laptop with dev tools - Lain Aesthetic";
+
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    home-manager = {
+      url = "github:nix-community/home-manager";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+  };
+
+  outputs = { self, nixpkgs, home-manager, ... }@inputs: {
+    nixosConfigurations.lain = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      modules = [
+        ./hardware-configuration.nix
+         # ./configuration.nix
+        
+        ({ config, pkgs, lib, ... }: {
+          # Enable flakes
+          nix.settings.experimental-features = [ "nix-command" "flakes" ];
+          
+          # Kernel (latest)
+          boot.kernelPackages = lib.mkDefault pkgs.linuxPackages_latest;
+
+          # Bootloader
+          boot.loader.systemd-boot.enable = true;
+          boot.loader.efi.canTouchEfiVariables = true;
+          
+          # Hostname
+          networking.hostName = lib.mkForce "lain";
+          
+          # Enable networking
+          networking.networkmanager.enable = true;
+          
+          # Time zone
+          time.timeZone = "Asia/Bangkok";
+          
+          # Internationalization
+          i18n.defaultLocale = "en_US.UTF-8";
+          i18n.extraLocaleSettings = {
+            LC_ADDRESS = "th_TH.UTF-8";
+            LC_IDENTIFICATION = "th_TH.UTF-8";
+            LC_MEASUREMENT = "th_TH.UTF-8";
+            LC_MONETARY = "th_TH.UTF-8";
+            LC_NAME = "th_TH.UTF-8";
+            LC_NUMERIC = "th_TH.UTF-8";
+            LC_PAPER = "th_TH.UTF-8";
+            LC_TELEPHONE = "th_TH.UTF-8";
+            LC_TIME = "th_TH.UTF-8";
+          };
+
+          # X11 + Gnome
+          services.xserver.enable = true;
+          services.displayManager.gdm.enable = true;
+          services.desktopManager.gnome.enable = true;
+          services.xserver.xkb = {
+            layout = lib.mkForce "us,th";
+            options = "grp:alt_shift_toggle";
+          };
+
+          # Nvidia for RTX 4070 laptop
+          services.xserver.videoDrivers = [ "nvidia" ];
+          hardware.nvidia = {
+            modesetting.enable = true;
+            powerManagement.enable = true;
+            powerManagement.finegrained = true;
+            open = false;
+            nvidiaSettings = true;
+            package = config.boot.kernelPackages.nvidiaPackages.stable;
+            
+            prime = {
+              intelBusId = "PCI:0:2:0";
+              nvidiaBusId = "PCI:1:0:0";
+              offload = {
+                enable = true;
+                enableOffloadCmd = true;
+              };
+            };
+          };
+
+          # Graphics/CUDA support
+          hardware.graphics = {
+            enable = true;
+            enable32Bit = true;
+          };
+
+          # Audio
+          services.pulseaudio.enable = false;
+          security.rtkit.enable = true;
+          services.pipewire = {
+            enable = true;
+            alsa.enable = true;
+            alsa.support32Bit = true;
+            pulse.enable = true;
+          };
+
+          # User account
+          users.users.lain = {
+            isNormalUser = true;
+            description = "Lain";
+            extraGroups = [ "networkmanager" "wheel" "docker" ];
+          };
+
+          # Enable unfree packages
+          nixpkgs.config.allowUnfree = true;
+
+          # Docker
+          virtualisation.docker.enable = true;
+          hardware.nvidia-container-toolkit.enable = true;
+
+          # System packages
+          environment.systemPackages = with pkgs; [
+            # Basic tools
+            vim
+            git
+            curl
+            wget
+            tree
+            htop
+            btop
+	   
+	          # ASUS Things
+            asusctl
+            supergfxctl
+            
+            # Shell & Terminal
+            starship
+
+            # Browsers
+            brave
+            firefox
+            
+            # Development
+            vscode
+            git
+            github-cli
+            
+            # Programming languages & tools
+            python3
+            python3Packages.pip
+            python3Packages.virtualenv
+            nodejs_20
+            nodePackages.npm
+            nodePackages.yarn
+            rustc
+            cargo
+            gcc
+            clang
+            go
+            
+            # ML/AI tools
+            python3Packages.torch
+            python3Packages.torchvision
+            python3Packages.numpy
+            python3Packages.pandas
+            python3Packages.scikit-learn
+            python3Packages.matplotlib
+            python3Packages.jupyter
+            
+            # Communication
+            discord
+            
+            # Gaming
+            steam
+            lutris
+            
+            # Graphics (Adobe alternatives)
+            inkscape
+            gimp
+            krita
+            blender
+            
+            # Media
+            vlc
+            obs-studio
+            
+            # Archive tools
+            unzip
+            p7zip
+            
+            # CUDA toolkit
+            cudatoolkit
+            
+            # Nvidia tools
+            nvidia-docker
+            
+            # Gnome Extensions
+            gnomeExtensions.blur-my-shell
+            gnomeExtensions.user-themes
+            gnomeExtensions.dash-to-dock
+            gnomeExtensions.vitals
+          ];
+
+          # Steam configuration
+          programs.steam = {
+            enable = true;
+            remotePlay.openFirewall = true;
+            dedicatedServer.openFirewall = true;
+          };
+
+          # Gaming optimizations
+          programs.gamemode.enable = true;
+
+          # Fonts (Lain aesthetic - cyberpunk monospace)
+          fonts.packages = with pkgs; [
+            noto-fonts
+            noto-fonts-cjk-sans
+            noto-fonts-emoji
+            noto-fonts-extra
+            liberation_ttf
+            fira-code
+            fira-code-symbols
+            jetbrains-mono
+            hack-font
+            source-code-pro
+            iosevka
+            victor-mono
+          ];
+
+          # Firewall
+          networking.firewall.enable = true;
+          networking.firewall.allowedTCPPorts = [ 22 ];
+
+          # ASUS service
+          services.asusd.enable = true;
+
+          # SSH
+          services.openssh.enable = true;
+          system.autoUpgrade = {
+            enable = true;
+            flake = inputs.self.outPath;
+            flags = [
+              "--update-input"
+              "nixpkgs"
+              "-L"
+            ];
+            dates = "02:00";
+            randomizedDelaySec = "45min";
+          };
+
+          system.stateVersion = "25.05";
+        })
+        
+        # Home Manager
+        home-manager.nixosModules.home-manager
+        {
+          home-manager.useGlobalPkgs = true;
+          home-manager.useUserPackages = true;
+          home-manager.users.lain = {
+            home.stateVersion = "25.05";
+            
+            # Git config
+            programs.git = {
+              enable = true;
+              userName = "Mikasuru";
+              userEmail = "poom792.com@gmail.com";
+            };
+            
+            # Shell configuration
+            programs.bash = {
+              enable = true;
+              shellAliases = {
+                # System shortcuts
+                ll = "ls -alF";
+                la = "ls -A";
+                l = "ls -CF";
+                grep = "grep --color=auto";
+                
+                # Git shortcuts
+                gs = "git status";
+                ga = "git add";
+                gc = "git commit";
+                gp = "git push";
+                gl = "git log --oneline";
+                gd = "git diff";
+                
+                # NixOS shortcuts
+                rebuild = "sudo nixos-rebuild switch --flake /etc/nixos#lain";
+                reconfig = "sudo nano /etc/nixos/flake.nix";
+                
+                # Development
+                py = "python3";
+                pip = "python3 -m pip";
+                
+                # GPU shortcuts
+                gpu = "nvidia-smi";
+                gpuwatch = "nvidia-smi -l 1";
+                
+                # ASUS ROG shortcuts
+                perf = "asusctl profile -P Performance";
+                balanced = "asusctl profile -P Balanced";
+                quiet = "asusctl profile -P Quiet";
+                
+                # Utilities
+                weather = "curl wttr.in/Hat+Yai";
+                myip = "curl ipinfo.io/ip";
+                
+                # Quick navigation
+                ".." = "cd ..";
+                "..." = "cd ../..";
+                "...." = "cd ../../..";
+                
+                # Lain-inspired aliases
+                connect = "nmtui"; # "Let's all love Lain"
+                wired = "ip addr show"; # Check network "wired" status
+                present = "date"; # "Present day, present time"
+              };
+              
+              # Add Lain quote on shell startup
+              initExtra = ''
+              # ===== Navi / fastfetch-like boot panel =====
+              if [ -z "$LAIN_BOOT_SILENT" ] && [ -t 1 ]; then
+                _d(){ [ "''${LAIN_FAST:-0}" = "1" ] || sleep "$1"; }
+
+                # Colors
+                esc(){ printf '\033[%sm' "$1"; }
+                B=$(esc 1); D=$(esc 2); K=$(esc 90); W=$(esc 97); R=$(esc 31); C=$(esc 36); G=$(esc 32); Y=$(esc 33); O=$(esc 0)
+
+                # Helpers
+                _val(){ printf "%s" "''${1:-unknown}"; }
+
+                # System info (portable-ish)
+                _user="''${USER:-user}"
+                _host="$(hostname 2>/dev/null || echo navi)"
+                _os="$(
+                  # Try various sources
+                  if [ -f /etc/os-release ]; then . /etc/os-release 2>/dev/null; echo "''${PRETTY_NAME:-$NAME}"; \
+                  elif command -v uname >/dev/null 2>&1; then echo "$(uname -s)"; else echo "Linux"; fi
+                )"
+                _kern="$(uname -sr 2>/dev/null || echo Linux)"
+                _upt="$(uptime -p 2>/dev/null | sed 's/up //' || echo unknown)"
+                _shell="$SHELL"
+                _term="$TERM"
+                _de="''${XDG_CURRENT_DESKTOP:-''${XDG_SESSION_DESKTOP:-tty}}"
+                _wm="$(_val "$XDG_SESSION_WINDOW_MANAGER")"
+                _res="$(
+                  if command -v xrandr >/dev/null 2>&1; then xrandr --current 2>/dev/null | awk '/\*/{print $1; exit}';
+                  elif command -v hyprctl >/dev/null 2>&1; then hyprctl monitors -j 2>/dev/null | sed -n 's/.*"width":\([0-9]*\).*"height":\([0-9]*\).*/\1x\2/p' | head -1;
+                  else printf "%sx%s" "''${COLUMNS:-80}" "''${LINES:-24}"; fi
+                )"
+                _cpu="$(
+                  if command -v lscpu >/dev/null 2>&1; then
+                    lscpu | awk -F: '/Model name/{gsub(/^ +/,"",$2);print $2;exit}'
+                  elif [ -r /proc/cpuinfo ]; then
+                    awk -F: '/model name/{print $2; exit}' /proc/cpuinfo | sed 's/^ //'
+                  fi
+                )"
+                _gpu="$(
+                  if command -v nvidia-smi >/dev/null 2>&1; then
+                    nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1
+                  elif command -v lspci >/dev/null 2>&1; then
+                    lspci | grep -iE 'vga|3d|display' | head -1 | sed 's/^[^:]*: //'
+                  fi
+                )"
+                _mem="$(
+                  if [ -r /proc/meminfo ]; then
+                    awk '
+                      /MemTotal:/ {tot=$2}
+                      /MemAvailable:/ {free=$2}
+                      END{
+                        used=(tot-free)/1024/1024; tot=tot/1024/1024;
+                        printf("%.1fGiB / %.1fGiB", used, tot)
+                      }' /proc/meminfo
+                  fi
+                )"
+                _disk="$(
+                  df -hP / 2>/dev/null | awk 'NR==2{print $3" / "$2" ("$5")"}'
+                )"
+                _pkgs="$(
+                  if command -v rpm >/dev/null 2>&1; then
+                    rpm -qa 2>/dev/null | wc -l
+                  elif command -v nix-store >/dev/null 2>&1; then
+                    nix-store --query --requisites /run/current-system 2>/dev/null | wc -l
+                  elif command -v pacman >/dev/null 2>&1; then
+                    pacman -Qq 2>/dev/null | wc -l
+                  elif command -v dpkg >/dev/null 2>&1; then
+                    dpkg-query -f ''\${binary:Package}\n -W 2>/dev/null | wc -l
+                  fi
+                )"
+
+                # Clear and move to home
+                printf "\033[2J\033[H"
+
+                # Left logo
+                  _logo="$(cat <<'__NAVI_ASCII__' 
+                               ███                
+                               ███                
+                                                  
+                       ██   █████████   ██        
+                    █████ █████████████ █████     
+                  █████  ████       ████   ████   
+                  ███   ████  █████  ████   ████  
+                  ███   ████ ███████ ████   ████  
+                   ████  ███  █████  ███  ████    
+                     ████ ████     ████ ████      
+                  ██   ██  █████ █████  ██   ██   
+                  ████       ███ ███       ████   
+                             ███ ███              
+                        ███  ███ ███  ███         
+                        ████████ ████████         
+                          ████     ████           
+              __NAVI_ASCII__
+              )"
+
+                if [ -n "$_cpu" ]; then _cpu_v="$_cpu"; else _cpu_v="unknown"; fi
+                if [ -n "$_gpu" ]; then _gpu_v="$_gpu"; else _gpu_v="unknown"; fi
+                if [ -n "$_mem" ]; then _mem_v="$_mem"; else _mem_v="unknown"; fi
+                if [ -n "$_disk" ]; then _disk_v="$_disk"; else _disk_v="unknown"; fi
+                if [ -n "$_pkgs" ]; then _pkgs_v="$_pkgs"; else _pkgs_v="unknown"; fi
+                _dewm="$_de"
+                if [ -n "$_wm" ]; then _dewm="$_de / $_wm"; fi
+
+                # Right panel
+                  _rows=(
+                    "User        : $_user@$_host"
+                    "OS          : $_os"
+                    "Kernel      : $_kern"
+                    "Shell       : $_shell"
+                    "Terminal    : $_term"
+                    "DE / WM     : $_dewm"
+                    "Resolution  : $_res"
+                    "CPU         : $_cpu_v"
+                    "GPU         : $_gpu_v"
+                    "Memory      : $_mem_v"
+                    "Disk        : $_disk_v"
+                    "Packages    : $_pkgs_v"
+                    "Time        : $(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null || printf '%s' "$_now")"
+                  )
+
+                  # Layout
+                  left_w=22
+                  gap="   "
+
+                  # Header
+                  printf "%s⟦ wired interface ⟧──────────────────────────────────────────%s\n" "$K" "$O"
+
+                  logo_lines="$(printf '%s\n' "$_logo" | wc -l)"
+                  max_lines=$(( logo_lines > ''\${#_rows[@]} ? logo_lines : ''\${#_rows[@]} ))
+
+                  i=0
+                  while [ $i -lt $max_lines ]; do
+                    left_line="$(printf '%s\n' "$_logo" | sed -n "$((i+1))p")"
+                    right_line="''\${_rows[i]}"
+                    printf "%s%-*s%s%s%s\n" \
+                      "$W" "$left_w" "''\${left_line:- }" "$O" "$gap" "''\${right_line:-}"
+                    _d 0.005
+                    i=$((i+1))
+                  done
+
+                  printf "%s────────────────────────────────────────────────────────────%s\n" "$K" "$O"
+                  printf "%sλ%s Welcome to the %sWired%s, %s%s%s.\n" "$R" "$O" "$W" "$O" "$B" "$_user" "$O"
+
+                  # Cleanup
+                  unset B D K W R C G Y O
+                  unset _user _host _os _kern _upt _shell _term _de _wm _res _cpu _gpu _mem _disk _pkgs _logo _rows left_w gap logo_lines max_lines i
+                  unset -f esc _d _val
+                fi
+              '';
+            };
+
+            programs.starship = {
+            enable = true;
+            settings = {
+              format = "[⟦](dimmed white)[$username](bold bright-black)@[$hostname](bold bright-black)[⟧](dimmed white) [$directory](bold bright-white)$git_branch$git_status$line_break[λ](bold red) ";
+
+              add_newline = false;
+
+              character = {
+                success_symbol = "[λ](bold white)";
+                error_symbol = "[λ](bold red)";
+                vicmd_symbol = "[λ](bold magenta)";
+              };
+
+              username = {
+                show_always = true;
+                format = "$user";
+                style_user = "bold bright-black";
+              };
+
+              hostname = {
+                ssh_only = false;
+                format = "$hostname";
+                style = "bold bright-black";
+              };
+
+              directory = {
+                style = "bold bright-white";
+                truncation_length = 3;
+                truncation_symbol = "…/";
+                format = "$path";
+                substitutions = {
+                  "Documents" = "D";
+                  "Downloads" = "DL";
+                  "Music" = "M";
+                  "Pictures" = "P";
+                  "Videos" = "V";
+                  "Projects" = "PRJ";
+                  "Code" = "SRC";
+                  "/home/lain" = "lain/";
+                };
+              };
+
+              git_branch = {
+                symbol = "";
+                style = "dimmed purple";
+                format = " [git:$branch]($style)";
+              };
+
+              git_status = {
+                style = "dimmed red";
+                format = " [$all_status$ahead_behind]($style)";
+                conflicted = "⚡";
+                ahead = "⇡";
+                behind = "⇣";
+                diverged = "⇕";
+                up_to_date = "✓";
+                untracked = "?";
+                stashed = "$";
+                modified = "!";
+                staged = "+";
+                renamed = "»";
+                deleted = "✘";
+              };
+
+              memory_usage = {
+                disabled = false;
+                threshold = 70;
+                style = "dimmed red";
+                format = " [$ram]($style)";
+              };
+
+              custom.gpu_usage = {
+                command = "nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits 2>/dev/null || echo '0'";
+                when = "command -v nvidia-smi";
+                format = " [GPU:$output%]($style)";
+                style = "dimmed green";
+              };
+
+              custom.battery_status = {
+                command = "cat /sys/class/power_supply/BAT*/capacity 2>/dev/null | head -1 || echo '100'";
+                when = "test -d /sys/class/power_supply/BAT*";
+                format = " [BAT:$output%]($style)";
+                style = "dimmed yellow";
+              };
+
+              time = {
+                disabled = false;
+                format = " [$time]($style)";
+                style = "dimmed white";
+                time_format = "%H:%M";
+              };
+
+              cmd_duration = {
+                disabled = false;
+                min_time = 2000;
+                format = " [Δ$duration]($style)";
+                style = "dimmed white";
+              };
+
+              python = {
+                disabled = false;
+                symbol = "py:";
+                style = "dimmed cyan";
+                format = " [$symbol$version]($style)";
+              };
+
+              rust = {
+                disabled = false;
+                symbol = "rs:";
+                style = "dimmed red";
+                format = " [$symbol$version]($style)";
+              };
+
+              nodejs = {
+                disabled = false;
+                symbol = "js:";
+                style = "dimmed green";
+                format = " [$symbol$version]($style)";
+              };
+
+              docker_context = {
+                disabled = false;
+                symbol = "dk:";
+                style = "dimmed blue";
+                format = " [$symbol$context]($style)";
+              };
+
+              # kill the noise
+              package.disabled = true;
+              aws.disabled = true;
+              gcloud.disabled = true;
+            };
+          };
+
+            # Gnome Extensions and Theme Configuration
+            dconf.settings = {
+              "org/gnome/shell" = {
+                enabled-extensions = [
+                  "blur-my-shell@aunetx"
+                  "user-theme@gnome-shell-extensions.gcampax.github.com"
+                  "dash-to-dock@micxgx.gmail.com"
+                  "Vitals@CoreCoding.com"
+                ];
+              };
+              
+              # Lain-inspired dark theme
+              "org/gnome/desktop/interface" = {
+                gtk-theme = "Adwaita-dark";
+                icon-theme = "Adwaita";
+                cursor-theme = "Adwaita";
+                text-scaling-factor = 1.25;              # เพิ่ม scaling
+                clock-show-seconds = true;
+              };
+              
+              "org/gnome/desktop/wm/preferences" = {
+                titlebar-font = "JetBrains Mono Bold 11";
+                theme = "Adwaita-dark";
+              };
+              
+              # Terminal theme (Matrix green on black)
+              "org/gnome/terminal/legacy/profiles:/:b1dcc9dd-5262-4d8d-a863-c897e6d979b9" = {
+                visible-name = "Lain";
+                background-color = "rgb(0,0,0)";
+                foreground-color = "rgb(0,255,41)"; # Matrix green
+                use-theme-colors = false;
+                use-theme-transparency = false;
+                use-transparent-background = true;
+                background-transparency-percent = 10;
+                palette = [
+                  "rgb(0,0,0)"       # black
+                  "rgb(255,65,65)"   # red
+                  "rgb(65,255,65)"   # green  
+                  "rgb(255,255,65)"  # yellow
+                  "rgb(65,65,255)"   # blue
+                  "rgb(255,65,255)"  # magenta
+                  "rgb(65,255,255)"  # cyan
+                  "rgb(255,255,255)" # white
+                  "rgb(85,85,85)"    # bright black
+                  "rgb(255,85,85)"   # bright red
+                  "rgb(85,255,85)"   # bright green
+                  "rgb(255,255,85)"  # bright yellow
+                  "rgb(85,85,255)"   # bright blue
+                  "rgb(255,85,255)"  # bright magenta
+                  "rgb(85,255,255)"  # bright cyan
+                  "rgb(255,255,255)" # bright white
+                ];
+                bold-is-bright = true;
+                cursor-blink-mode = "on";
+                cursor-shape = "block";
+              };
+              
+              # Blur My Shell settings for cyberpunk effect
+              "org/gnome/shell/extensions/blur-my-shell/panel" = {
+                blur = true;
+                brightness = 0.8;
+                sigma = 15;
+              };
+              
+              "org/gnome/shell/extensions/blur-my-shell/overview" = {
+                blur = true;
+                brightness = 0.8;
+                sigma = 15;
+              };
+              
+              # Dash to dock settings
+              "org/gnome/shell/extensions/dash-to-dock" = {
+                dock-position = "BOTTOM";
+                transparency-mode = "DYNAMIC";
+                running-indicator-style = "DOTS";
+                show-favorites = true;
+                show-running = true;
+                show-apps-at-top = false;
+              };
+              
+              # Vitals extension (system monitoring like in cyberpunk)
+              "org/gnome/shell/extensions/vitals" = {
+                show-gpu = true;
+                show-memory = true;
+                show-processor = true;
+                show-network = true;
+                show-temperature = true;
+              };
+            };
+
+            # VS Code with dark theme
+            programs.vscode = {
+              enable = true;
+              profiles.default.userSettings = {
+                "workbench.colorTheme" = "Default Dark Modern";
+                "editor.fontFamily" = "'JetBrains Mono', 'Hack', monospace";
+                "editor.fontSize" = 14;
+                "editor.fontLigatures" = true;
+                "terminal.integrated.fontSize" = 13;
+                "workbench.startupEditor" = "none";
+                "editor.minimap.enabled" = false;
+                "workbench.activityBar.location" = "top";
+              };
+            };
+
+            # Custom desktop entries
+            xdg.desktopEntries.brave-nvidia = {
+              name = "Brave Browser (Nvidia)";
+              comment = "Web browser with Nvidia GPU";
+              exec = "env __NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia brave %U";
+              icon = "brave-browser";
+              terminal = false;
+              type = "Application";
+              mimeType = [
+                "text/html"
+                "text/xml"
+                "application/xhtml+xml"
+                "x-scheme-handler/http"
+                "x-scheme-handler/https"
+              ];
+              categories = [ "Network" "WebBrowser" ];
+            };
+          };
+        }
+      ];
+    };
+  };
+}
